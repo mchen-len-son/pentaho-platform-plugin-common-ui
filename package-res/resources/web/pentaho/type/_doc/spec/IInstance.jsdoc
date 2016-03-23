@@ -1,5 +1,5 @@
 /*!
- * Copyright 2010 - 2015 Pentaho Corporation.  All rights reserved.
+ * Copyright 2010 - 2016 Pentaho Corporation.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,18 @@
  */
 
 /**
- * The `spec.ITypeMeta` interface represents the metadata used to
- * define a type.
+ * The `spec.IInstance` interface describes an instance with a generic, _object_ form.
  *
- * @name pentaho.type.spec.ITypeMeta
+ * @name pentaho.type.spec.IInstance
  *
  * @interface
  *
- * @property {string} [id] The id of the corresponding AMD module, if any.
+ * @see pentaho.type.spec.UInstance
+ */
+
+/**
+ * An inline type reference of the value's type.
+ * @name _
+ * @memberOf pentaho.type.spec.IInstance#
+ * @type {pentaho.type.spec.UTypeReference}
  */

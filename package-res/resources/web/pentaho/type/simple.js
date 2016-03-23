@@ -28,44 +28,24 @@ define([
     var Element = context.get(elemFactory);
 
     /**
-     * @name pentaho.type.Simple.Meta
+     * @name pentaho.type.Simple.Type
      * @class
-     * @extends pentaho.type.Element.Meta
+     * @extends pentaho.type.Element.Type
      *
-     * @classDesc The metadata class of {@link pentaho.type.Simple}.
+     * @classDesc The type class of {@link pentaho.type.Simple}.
      */
 
     /**
      * @name pentaho.type.Simple
      * @class
      * @extends pentaho.type.Element
-     * @amd pentaho/type/simple
+     * @amd {pentaho.type.Factory<pentaho.type.Simple>} pentaho/type/simple
      *
      * @classDesc The base abstract class of un-structured, indivisible values.
      *
-     * ### AMD
-     *
-     * The AMD module returns the type's factory, a
-     * {@link pentaho.type.Factory<pentaho.type.Simple>}.
-     *
-     * Module Id: `pentaho/type/simple`
-     *
-     * Simple type example:
-     * ```javascript
-     * define(["pentaho/type/simple"], function(simpleFactory) {
-     *
-     *   return function(context) {
-     *
-     *     var Simple = context.get(simpleFactory);
-     *
-     *     return Simple.extend({
-     *
-     *     });
-     *   };
-     * });
-     * ```
-     *
      * @description Creates a simple instance.
+     * @constructor
+     * @param {pentaho.type.spec.USimple} [spec] A simple specification.
      */
     var Simple = Element.extend("pentaho.type.Simple", /** @lends pentaho.type.Simple# */{
 
@@ -120,7 +100,7 @@ define([
         // Value is immutable. Can only be set once.
 
         // Throws if nully.
-        _ = this.meta.cast(_);
+        _ = this.type.cast(_);
 
         if(this._value == null) {
           // First set
@@ -138,7 +118,7 @@ define([
        */
       set v(value) {
         this.value = value;
-      },
+      }, // jshint -W078
       //endregion
 
       //region formatted attribute
@@ -165,7 +145,7 @@ define([
        */
       set f(value) {
         this.formatted = value;
-      },
+      }, // jshint -W078
       //endregion
 
       /**
@@ -194,11 +174,11 @@ define([
        *
        * If two values have the same concrete type and their
        * keys are equal, then it must also be the case that
-       * {@link pentaho.type.Value.Meta#areEqual}
+       * {@link pentaho.type.Value.Type#areEqual}
        * returns `true` when given the two values.
        * The opposite should be true as well.
        * If two values of the same concrete type have distinct keys,
-       * then {@link pentaho.type.Value.Meta#areEqual} should return `false`.
+       * then {@link pentaho.type.Value.Type#areEqual} should return `false`.
        *
        * The default simple value implementation, returns the result of calling
        * `toString()` on {@link pentaho.type.Simple#value}.
@@ -266,7 +246,28 @@ define([
       },
       //endregion
 
-      meta: /** pentaho.type.Simple.Meta# */{
+      /**
+       * @inheritdoc
+       */
+      toSpecInScope: function(scope, requireType, keyArgs) {
+        var addFormatted = !keyArgs.omitFormatted && !!this._formatted;
+
+        // Don't need a cell/object spec?
+        if(!(addFormatted || requireType))
+          return this._value;
+
+        // Need one. Ensure _ is the first property
+        /*jshint laxbreak:true*/
+        var spec = requireType
+            ? {_: this.type.toReference(scope, keyArgs), v: this._value}
+            : {v: this._value};
+
+        if(addFormatted) spec.f = this._formatted;
+
+        return spec;
+      },
+
+      type: /** pentaho.type.Simple.Type# */{
         id: module.id,
         isAbstract: true,
         styleClass: "pentaho-type-simple",
@@ -307,22 +308,25 @@ define([
         //endregion
       }
     }).implement({
-      meta: bundle.structured.simple
+      type: bundle.structured.simple
     });
 
     return Simple;
 
     //region cast private methods
     /**
-     * Wrapper cast function {@link pentaho.type.Simple.Meta#cast}
+     * Wrapper cast function {@link pentaho.type.Simple.Type#cast}
      */
     function castTop(value) {
+      /*jshint validthis:true*/
+
       if(value == null)
         throw error.argRequired("value");
 
       value = this._cast(value);
       if(value == null)
-        throw error.argInvalid("value", bundle.format(bundle.structured.errors.value.cannotConvertToType, [this.label]));
+        throw error.argInvalid("value",
+            bundle.format(bundle.structured.errors.value.cannotConvertToType, [this.label]));
 
       return value;
     }

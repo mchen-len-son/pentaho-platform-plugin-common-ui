@@ -19,11 +19,11 @@
  *
  * Examples of dynamic property attributes:
  *
- * * {@link pentaho.type.Property.Meta#isApplicable}
- * * {@link pentaho.type.Property.Meta#isReadOnly}
- * * {@link pentaho.type.Property.Meta#isRequired}
- * * {@link pentaho.type.Property.Meta#countMin}
- * * {@link pentaho.type.Property.Meta#countMax}
+ * * {@link pentaho.type.Property.Type#isApplicable}
+ * * {@link pentaho.type.Property.Type#isReadOnly}
+ * * {@link pentaho.type.Property.Type#isRequired}
+ * * {@link pentaho.type.Property.Type#countMin}
+ * * {@link pentaho.type.Property.Type#countMax}
  *
  * @callback pentaho.type.PropertyDynamicAttribute
  * @template T

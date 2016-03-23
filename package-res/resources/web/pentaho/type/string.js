@@ -29,16 +29,9 @@ define([
      * @name pentaho.type.String
      * @class
      * @extends pentaho.type.Simple
-     * @amd pentaho/type/string
+     * @amd {pentaho.type.Factory<pentaho.type.String>} pentaho/type/string
      *
      * @classDesc A textual type.
-     *
-     * ### AMD
-     *
-     * Module Id: `pentaho/type/string`
-     *
-     * The AMD module returns the type's factory, a
-     * {@link pentaho.type.Factory<pentaho.type.String>}.
      *
      * @description Creates a string instance.
      */
@@ -49,13 +42,14 @@ define([
        * @type string
        * @readonly
        */
-      meta: {
+
+      type: {
         id: module.id,
         styleClass: "pentaho-type-string",
         cast: String
       }
     }).implement({
-      meta: bundle.structured["string"]
+      type: bundle.structured["string"]
     });
   };
 });
