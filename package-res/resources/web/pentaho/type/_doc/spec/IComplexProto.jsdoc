@@ -1,5 +1,5 @@
 /*!
- * Copyright 2010 - 2016 Pentaho Corporation. All rights reserved.
+ * Copyright 2010 - 2015 Pentaho Corporation.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,16 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-define([
-  "./DidSelect"
-], function(DidSelect) {
-  "use strict";
 
-  return DidSelect.extend("pentaho.visual.base.events.DidChangeSelection",
-    /** @lends pentaho.visual.base.events.DidChangeSelection# */{}, {
-      get type(){
-        return "did:change:selectionFilter";
-      }
-    });
+/**
+ * The `spec.IComplexProto` interface represents the specification of the prototype of a complex type's instance class.
+ *
+ * @name pentaho.type.spec.IComplexProto
+ * @interface
+ * @extends pentaho.type.spec.IValueProto
+ */
 
-});
+/**
+ * The extensible/configurable members of the prototype of complex type classes.
+ *
+ * @name type
+ * @memberOf pentaho.type.spec.IComplexProto#
+ * @type {pentaho.type.spec.IComplexTypeProto}
+ *
+ * @see pentaho.type.spec.IComplexTypeProto#instance
+ */

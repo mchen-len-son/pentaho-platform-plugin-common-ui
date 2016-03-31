@@ -1,5 +1,5 @@
 /*!
- * Copyright 2010 - 2016 Pentaho Corporation. All rights reserved.
+ * Copyright 2010 - 2016 Pentaho Corporation.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,16 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-define([
-  "./RejectedSelect"
-], function(RejectedSelect) {
-  "use strict";
 
-  return RejectedSelect.extend("pentaho.visual.base.events.RejectedChangeSelection",
-    /** @lends pentaho.visual.base.events.RejectedChangeSelection# */{}, {
-      get type(){
-        return "rejected:change:selectionFilter";
-      }
-    });
+/**
+ * The `spec.ISimpleProto` interface represents the specification of the prototype of a simple type's instance class.
+ *
+ * @name pentaho.type.spec.ISimpleProto
+ * @interface
+ * @extends pentaho.type.spec.IValueProto
+ */
 
-});
+/**
+ * The extensible/configurable members of the prototype of simple type classes.
+ *
+ * @name type
+ * @memberOf pentaho.type.spec.ISimpleProto#
+ * @type {pentaho.type.spec.ISimpleTypeProto}
+ *
+ * @see pentaho.type.spec.ISimpleTypeProto#instance
+ */

@@ -18,10 +18,19 @@ define([
   "./element",
   "./PropertyTypeCollection",
   "./valueHelper",
+  "../lang/EventSource",
+  "../lang/ActionResult",
+  "../lang/UserError",
+  "./events/WillChange",
+  "./events/RejectedChange",
+  "./events/DidChange",
+  "./ComplexChangeset",
   "../i18n!types",
   "../util/object",
   "../util/error"
-], function(module, elemFactory, PropertyTypeCollection, valueHelper, bundle, O, error) {
+], function(module, elemFactory, PropertyTypeCollection, valueHelper,
+            EventSource, ActionResult, UserError, WillChange, RejectedChange, DidChange,
+            ComplexChangeset, bundle, O, error) {
 
   "use strict";
 
@@ -84,6 +93,10 @@ define([
      *
      * @constructor
      * @param {pentaho.type.spec.UComplex} [spec] A complex specification.
+     *
+     * @see pentaho.type.spec.IComplex
+     * @see pentaho.type.spec.IComplexProto
+     * @see pentaho.type.spec.IComplexTypeProto
      */
     var Complex = Element.extend("pentaho.type.Complex", /** @lends pentaho.type.Complex# */{
 
@@ -94,14 +107,14 @@ define([
       constructor: function(spec) {
         // Create `Property` instances.
         var pTypes = this.type._getProps(),
-            i = pTypes.length,
-            nameProp = !spec ? undefined : (Array.isArray(spec) ? "index" : "name"),
-            pType,
-            values = {};
+          i = pTypes.length,
+          nameProp = !spec ? undefined : (Array.isArray(spec) ? "index" : "name"),
+          pType,
+          values = {};
 
         while(i--) {
           pType = pTypes[i];
-          values[pType.name] = pType.toValue( nameProp && spec[pType[nameProp]] );
+          values[pType.name] = pType.toValue(nameProp && spec[pType[nameProp]]);
         }
 
         this._values = values;
@@ -131,10 +144,10 @@ define([
       _clone: function(clone) {
         // All properties are copied except lists, which are shallow cloned.
         var pTypes = this.type._getProps(),
-            i = pTypes.length,
-            values = this._values,
-            cloneValues = {},
-            pType, v;
+          i = pTypes.length,
+          values = this._values,
+          cloneValues = {},
+          pType, v;
 
         while(i--) {
           pType = pTypes[i];
@@ -316,13 +329,14 @@ define([
 
       _path: function(args, sloppy) {
         var L = args.length,
-            i = -1,
-            v = this,
-            step;
+          i = -1,
+          v = this,
+          step;
 
-        while(++i < L)
+        while(++i < L) {
           if(!(v = (typeof (step = args[i]) === "number") ? v.at(step, sloppy) : v.get(step, sloppy)))
             break;
+        }
 
         return v;
       },
@@ -330,25 +344,167 @@ define([
       /**
        * Sets the value of a property.
        *
-       * @param {string|!pentaho.type.Property.Type} name The property name or type object.
+       * @param {nonEmptyString|!pentaho.type.Property.Type} name - The property name or type object.
        * @param {any?} [valueSpec=null] A value specification.
        *
-       * @return {pentaho.type.Complex} This object.
+       * @return {pentaho.lang.ActionResult} The result object.
        * @throws {pentaho.lang.ArgumentInvalidError} When a property with name `name` is not defined.
+       * @fires "will:change"
+       * @fires "did:change"
+       * @fires "rejected:change"
        */
       set: function(name, valueSpec) {
-        var pType  = this.type.get(name),
-            value0 = this._values[pType.name];
+        var pType = this.type.get(name),
+          value0 = this._values[pType.name];
 
+        var changeset;
         if(pType.isList) {
           value0.set(valueSpec);
+          //TODO: add operation to changeset
+          changeset = new ComplexChangeset(this);
+          //changeset._setListChange(name, value0, valueSpec);
+          changeset.set(name, null); // TODO: remove. Added for demo purposes of BACKLOG-6739
+
         } else {
           var value1 = pType.toValue(valueSpec);
           if(!pType.type.areEqual(value0, value1)) {
-            // TODO: change event
-            this._values[pType.name] = value1;
+            changeset = new ComplexChangeset(this);
+            changeset._setValueChange(name, value1, value0);
           }
         }
+
+        if(changeset) {
+          var executionError = this._change(changeset);
+          if(executionError) return ActionResult.reject(executionError);
+          return ActionResult.fulfill(changeset);
+        }
+        return ActionResult.reject(new UserError("Nothing to do"));
+
+      },
+
+      /**
+       * Orchestrates the will/did/rejected event loop around property changes.
+       *
+       * @param {pentaho.type.ComplexChangeset} changeset - The set of changes.
+       *
+       * @return {?pentaho.lang.Base.Error} An error if the change loop was canceled or invalid,
+       * or `undefined` otherwise.
+       *
+       * @private
+       * @ignore
+       */
+      _change: function(changeset) {
+        var executionError = this._changeWill(changeset);
+        changeset.freeze();
+        if(executionError) {
+          this._changeRejected(changeset, executionError);
+          return executionError;
+        }
+
+        executionError = this._changeDo(changeset);
+        if(executionError) {
+          this._changeRejected(changeset, executionError);
+          return executionError;
+        }
+        this._changeDid(changeset);
+      },
+
+      /**
+       * Applies a set of changes to this object.
+       *
+       * @param {pentaho.type.ComplexChangeset} changeset - The set of changes.
+       *
+       * @return {?pentaho.lang.UserError} An error if the values of the properties to be changed
+       * do not match those declared in the `changeset` object, or `undefined` otherwise.
+       *
+       * @private
+       * @ignore
+       */
+      _changeDo: function(changeset) {
+
+        var propertyNames = changeset.propertyNames;
+
+        // First sweep: ensure values haven't changed
+        for(var k = 0, N = propertyNames.length; k < N; k++) {
+          var name = propertyNames[k];
+          var pType = this.type.get(name);
+
+          if(pType.isList) {
+            //TODO: look for reasons why a property that is a list could cancel the whole changeset
+          } else {
+            var currentValue = this._values[name];
+            var oldValue = changeset.getChange(name).oldValue;
+            if(!pType.type.areEqual(currentValue, oldValue))
+              return error.argRange("changeset"); //Mismatching values
+          }
+        }
+
+        // Second sweep: modify the values
+        changeset.propertyNames.forEach(function(name) {
+          var pType = this.type.get(name);
+
+          if(pType.isList) {
+            //TODO: handle the changes on a list property in a later story
+          } else {
+            var value0 = this._values[pType.name];
+            var value1 = pType.toValue(changeset.getChange(name).newValue);
+            //TODO: confirm if it's worth having this if (setting a property isn't that expensive)
+            if(!pType.type.areEqual(value0, value1)) {
+              this._values[name] = value1;
+            }
+          }
+        }, this);
+      },
+
+      /**
+       * Emits the "will:change" event, if need be.
+       *
+       * @param {pentaho.type.ComplexChangeset} changeset - The set of changes.
+       *
+       * @return {?pentaho.lang.Base.Error} An error if the change loop was canceled or invalid,
+       * or `undefined` otherwise.
+       *
+       * @private
+       * @ignore
+       */
+      _changeWill: function(changeset) {
+        if(!this._hasListeners("will:change")) return;
+
+        var will = new WillChange(this, changeset);
+        if(!this._emitSafe(will)) {
+          return will.cancelReason;
+        }
+      },
+
+      /**
+       * Emits the "did:change" event, if need be.
+       *
+       * @param {pentaho.type.ComplexChangeset} changeset - The set of changes.
+       *
+       * @private
+       * @ignore
+       */
+      _changeDid: function(changeset) {
+        if(!this._hasListeners("did:change")) return;
+
+        var event = new DidChange(this, changeset);
+        this._emitSafe(event);
+      },
+
+      /**
+       * Emits the "will:change" event, if need be.
+       *
+       * @param {pentaho.type.ComplexChangeset} changeset - The set of changes.
+       * @param {pentaho.lang.Base.Error} reason - The reason why the change loop was rejected.
+       *
+       * @private
+       * @ignore
+       */
+      _changeRejected: function(changeset, reason) {
+        if(!this._hasListeners("rejected:change")) return;
+
+        var event = new RejectedChange(this, changeset, reason);
+        this._emitSafe(event);
       },
       //endregion
 
@@ -436,7 +592,7 @@ define([
 
         var value = this._values[pType.name];
         return pType.isList ? value.count :
-               value      ? 1 : 0;
+          value ? 1 : 0;
       },
 
       /**
@@ -608,19 +764,47 @@ define([
       //endregion
       //endregion
 
-      //region serialization
+      //region validation
+      // @override
       /**
-       * @inheritdoc
+       * Determines if this complex value is a **valid instance** of its type.
+       *
+       * The default implementation
+       * validates each property's value against
+       * the property's [type]{@link pentaho.type.Property.Type#type}
+       * and collects and returns any reported errors.
+       * Override to complement with a type's specific validation logic.
+       *
+       * You can use the error utilities in {@link pentaho.type.valueHelper} to
+       * help in the implementation.
+       *
+       * @return {?Array.<!Error>} A non-empty array of `Error` or `null`.
+       *
+       * @see pentaho.type.Value#isValid
        */
-      toSpecInScope: function(scope, requireType, keyArgs) {
-        var spec;
+      validate: function() {
+        var errors = null;
 
-        var useArray = !requireType && keyArgs.preferPropertyArray;
+        this.type.each(function(pType) {
+          errors = valueHelper.combineErrors(errors, pType.validate(this));
+        }, this);
+
+        return errors;
+      },
+      //endregion
+
+      //region serialization
+      toSpecInContext: function(keyArgs) {
+        if(!keyArgs) keyArgs = {};
+
+        var spec;
+        var includeType = !!keyArgs.includeType;
+        var useArray = !includeType && keyArgs.preferPropertyArray;
         if(useArray) {
           spec = [];
         } else {
           spec = {};
-          if(requireType) spec._ = this.type.toReference(scope, keyArgs);
+          if(includeType) spec._ = this.type.toRefInContext(keyArgs);
         }
 
         var includeDefaults = keyArgs.includeDefaults;
@@ -641,8 +825,8 @@ define([
             var valueSpec;
             if(value) {
               var valueType = propType.type;
-              var valueRequireType = value.type !== (valueType.isRefinement ? valueType.of : valueType);
-              valueSpec = value.toSpecInScope(scope, valueRequireType, keyArgs);
+              keyArgs.includeType = value.type !== (valueType.isRefinement ? valueType.of : valueType);
+              valueSpec = value.toSpecInContext(keyArgs);
             } else {
               valueSpec = null;
             }
@@ -679,7 +863,7 @@ define([
           // Lazy creation.
           var proto = this.constructor.prototype;
           return O.getOwn(proto, "_props") ||
-              (proto._props = PropertyTypeCollection.to([], /*declaringType:*/this));
+            (proto._props = PropertyTypeCollection.to([], /*declaringType:*/this));
         },
         //endregion
 
@@ -711,9 +895,9 @@ define([
           var ps;
           // !_props could only occur if accessing #get directly on Complex.type and it had no derived classes yet...
           return (!name || !(ps = this._props)) ? null :
-                 (typeof name === "string")     ? ps.get(name) :
-                 (ps.get(name.name) === name)   ? name :
-                 null;
+            (typeof name === "string") ? ps.get(name) :
+              (ps.get(name.name) === name) ? name :
+                null;
         },
 
         /**
@@ -784,9 +968,10 @@ define([
           var ps = this._props, L;
           if(ps && (L = ps.length)) {
             var i = -1;
-            while(++i < L)
+            while(++i < L) {
               if(f.call(x, ps[i], i, this) === false)
                 break;
+            }
           }
           return this;
         },
@@ -794,7 +979,7 @@ define([
         /**
          * Adds, overrides or configures properties to/of the complex type.
          *
-         * @param {pentaho.type.spec.IPropertyType|pentaho.type.spec.IPropertyType[]} propTypeSpec A property type
+         * @param {pentaho.type.spec.IPropertyTypeProto|pentaho.type.spec.IPropertyTypeProto[]} propTypeSpec A property type
          *   specification or an array of.
          *
          * @return {pentaho.type.Complex} This object.
@@ -805,44 +990,54 @@ define([
           return this;
         },
 
-        //region validation
-        // @override
-        /**
-         * Determines if a complex value,
-         * that _is an instance of this type_,
-         * is also a **valid instance** of _this_ type.
-         *
-         * Thus, `this.is(value)` must be true.
-         *
-         * The default implementation
-         * validates each property's value against
-         * the property's [type]{@link pentaho.type.Property.Type#type}
-         * and collects and returns any reported errors.
-         *
-         * @see pentaho.type.Value.Type#validate
-         * @see pentaho.type.Value.Type#validateInstance
-         *
-         * @param {!pentaho.type.Complex} value The complex value to validate.
-         *
-         * @return {Nully|Error|Array.<!Error>} An `Error`, a non-empty array of `Error` or a `Nully` value.
-         *
-         * @protected
-         * @overridable
-         */
-        _validate: function(value) {
-          var errors = null;
+        //region serialization
+        _fillSpecInContext: function(spec, keyArgs) {
 
-          this.each(function(pType) {
-            errors = valueHelper.combineErrors(errors, pType.validate(value));
-          }, this);
+          var any = this.base(spec, keyArgs);
 
-          return errors;
+          if(this.count) {
+            var props;
+
+            this.each(function(propType) {
+              // Root or overridden property type. Exclude simply inherited.
+              if(propType.declaringType === this) {
+                if(!props) {
+                  any = true;
+                  props = spec.props = [];
+                }
+                props.push(propType.toSpecInContext(keyArgs));
+              }
+            }, this);
+          }
+
+          return any;
         }
         //endregion
       }
-    }).implement({
+    })
+    .implement(EventSource)
+    .implement({
       type: bundle.structured.complex
     });
+
+    /**
+     * Creates a subtype of this one.
+     *
+     * For more information on class extension, in general,
+     * see {@link pentaho.lang.Base.extend}.
+     *
+     * @name extend
+     * @memberOf pentaho.type.Complex
+     *
+     * @param {string} [name] The name of the created class. Used for debugging purposes.
+     * @param {pentaho.type.spec.IComplexProto} [instSpec] The instance specification.
+     * @param {Object} [classSpec] The static specification.
+     * @param {Object} [keyArgs] The keyword arguments.
+     *
+     * @return {!Class.<pentaho.type.Complex>} The new complex instance subclass.
+     *
+     * @see pentaho.type.Value.extend
+     */
 
     return Complex;
   };
