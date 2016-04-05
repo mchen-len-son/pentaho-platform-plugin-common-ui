@@ -1,5 +1,5 @@
 /*!
- * Copyright 2010 - 2015 Pentaho Corporation.  All rights reserved.
+ * Copyright 2010 - 2016 Pentaho Corporation.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  * limitations under the License.
  *
  */
-define(['common-ui/prompting/WidgetBuilder', 'common-ui/prompting/builders/PromptPanelBuilder'],  function (WidgetBuilder, PromptPanelBuilder) {
+define(['common-ui/prompting/WidgetBuilder', 'common-ui/prompting/parameters/Parameter'],  function (WidgetBuilder, Parameter) {
 
   describe("WidgetBuilder", function() {
 
-    it("should have mappings array", function() {       
+    it("should have mappings array", function() {
       expect(WidgetBuilder.mapping).toBeDefined();
     });
 
     it("should throw an error trying to build a prompt-panel with no arguments", function() {
-      expect(WidgetBuilder.build).toThrow();
+      expect(WidgetBuilder.build).toThrowError();
     });
 
     it("should successfully build a prompt panel", function() {
@@ -36,6 +36,30 @@ define(['common-ui/prompting/WidgetBuilder', 'common-ui/prompting/builders/Promp
       expect(panel.type).toEqual('ScrollingPromptPanelLayoutComponent');
       expect(buildPanelComponentsFn).toHaveBeenCalled();
       expect(panel.promptPanel).toBeDefined();
+    });
+
+    it("distinguishes textbox and autocompletebox properly", function() {
+      var promptPanel = jasmine.createSpyObj('promptPanel', ['generateWidgetGUID', 'getParameterName']);
+
+      var param = new Parameter(),
+          type = "textbox";
+      param.type = type;
+      param.list = false;
+      var args = {
+        param: param,
+        promptPanel: promptPanel
+      };
+      var panel = WidgetBuilder.build(args, type);
+      expect(panel.type).toEqual("TextInputComponent");
+
+      args.param.list = true;
+      panel = WidgetBuilder.build(args, type);
+      expect(panel.type).toEqual("StaticAutocompleteBoxComponent");
+
+      args.param.type = "";
+      type = "";
+      panel = WidgetBuilder.build(args, type);
+      expect(panel.type).toEqual("StaticAutocompleteBoxComponent");
     });
 
   });
